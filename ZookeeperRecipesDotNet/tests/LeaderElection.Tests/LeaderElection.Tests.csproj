@@ -8,7 +8,13 @@
 
     <ItemGroup>
       <PackageReference Include="Serilog" Version="4.0.1" />
+      <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+      <PackageReference Include="xunit" Version="2.9.0" />
       <PackageReference Include="ZooKeeperNetEx" Version="3.4.12.4" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\src\LeaderElection\LeaderElection.csproj" />
     </ItemGroup>
 
 </Project>
