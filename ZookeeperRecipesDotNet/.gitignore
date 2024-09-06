@@ -1,4 +1,6 @@
 gitignoretest/
 .idea/
 **/obj/*
+**/bin/*
+**/debug/*
 ZookeeperRecipesDotNet.sln.DotSettings.user
