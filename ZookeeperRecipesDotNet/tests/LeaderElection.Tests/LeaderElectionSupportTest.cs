@@ -5,18 +5,22 @@ using Xunit;
 
 namespace LeaderElection.Tests;
 
-public sealed class LeaderElectionSupportTest : ClientBase {
+public sealed class LeaderElectionSupportTest : IAsyncLifetime 
+{
+    private const int ConnectionTimeout = 4000;
     private static int _globalCounter;
+    
     private readonly string _root = "/" + Interlocked.Increment(ref _globalCounter);
     private ZooKeeper _zooKeeper;
 
-    public override async Task InitializeAsync()
+    public async Task InitializeAsync()
     {
-        await base.InitializeAsync();
-        _zooKeeper = await CreateClient();
+        _zooKeeper = await CreateZookeeperClient();
+    }
 
-        await _zooKeeper.createAsync(_root, [],
-            ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+    public async Task DisposeAsync()
+    {
+        await ZKUtil.deleteRecursiveAsync(_zooKeeper, _root);
     }
 
     [Fact]
@@ -96,5 +100,20 @@ public sealed class LeaderElectionSupportTest : ClientBase {
         await electionSupport.start();
         await Task.Delay(sleepDuration);
         await electionSupport.stop();
+    }
+    
+    private static async Task<ZooKeeper> CreateZookeeperClient()
+    {
+        var watcher = new ConnectedWatcher();
+            
+        string zookeeperConnectionString = "localhost:2181";
+        var zk = new ZooKeeper(zookeeperConnectionString, ConnectionTimeout, watcher);
+
+        if (!await watcher.WaitForConnection().WithTimeout(ConnectionTimeout))
+        {
+            Assert.Fail("Unable to connect to server");
+        }
+            
+        return zk;
     }
 }
