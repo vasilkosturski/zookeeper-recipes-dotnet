@@ -16,11 +16,14 @@ public sealed class LeaderElectionSupportTest : IAsyncLifetime
     public async Task InitializeAsync()
     {
         _zooKeeper = await CreateZookeeperClient();
+        await _zooKeeper.createAsync(_root, new byte[0],
+                        ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
     }
 
     public async Task DisposeAsync()
     {
         await ZKUtil.deleteRecursiveAsync(_zooKeeper, _root);
+        await _zooKeeper.closeAsync();
     }
 
     [Fact]
