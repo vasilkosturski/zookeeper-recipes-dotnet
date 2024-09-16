@@ -1,17 +1,25 @@
-﻿using org.apache.zookeeper;
+﻿using FluentAssertions;
+using org.apache.zookeeper;
 using org.apache.zookeeper.recipes.leader;
 using Serilog;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace LeaderElection.Tests;
 
 public sealed class LeaderElectionSupportTest : IAsyncLifetime 
 {
+    private readonly ITestOutputHelper _testOutputHelper;
     private const int ConnectionTimeout = 4000;
     private static int _globalCounter;
     
     private readonly string _root = "/" + Interlocked.Increment(ref _globalCounter);
     private ZooKeeper _zooKeeper;
+
+    public LeaderElectionSupportTest(ITestOutputHelper testOutputHelper)
+    {
+        _testOutputHelper = testOutputHelper;
+    }
 
     public async Task InitializeAsync()
     {
@@ -85,6 +93,68 @@ public sealed class LeaderElectionSupportTest : IAsyncLifetime
         Assert.Equal("foohost", leaderHostName);
 
         await electionSupport.stop();
+    }
+
+    private class TestLeaderElectionAware(Func<ElectionEventType, Task> electionHandler) : LeaderElectionAware
+    {
+        public async Task onElectionEvent(ElectionEventType eventType)
+        {
+            await electionHandler(eventType);
+        }
+    }
+        
+    [Fact]
+    public async Task testReadyOffer()
+    {
+        var events = new List<ElectionEventType>();
+        var electedComplete = new TaskCompletionSource<bool>();
+        
+        var electionSupport1 = createLeaderElectionSupport();
+        await electionSupport1.start();
+        
+        var electionSupport2 = createLeaderElectionSupport();
+        var stoppedElectedNode = false;
+        var listener = new TestLeaderElectionAware(async eventType =>
+        {
+            events.Add(eventType);
+            if (!stoppedElectedNode
+                && eventType == ElectionEventType.DETERMINE_COMPLETE) {
+                stoppedElectedNode = true;
+                try {
+                    await electionSupport1.stop();
+                } catch (Exception e) {
+                    _testOutputHelper.WriteLine($"Unexpected exception, {e}");
+                }
+            }
+            if (eventType == ElectionEventType.ELECTED_COMPLETE) {
+                electedComplete.SetResult(true);
+            }
+        });
+        
+        electionSupport2.addListener(listener);
+        await electionSupport2.start();
+
+        _testOutputHelper.WriteLine(
+            await Task.WhenAny(electedComplete.Task, Task.Delay(ConnectionTimeout / 3)) == electedComplete.Task
+                ? "Re-election completed within the timeout."
+                : "Re-election did not complete within the timeout.");
+        
+        var expectedEvents = new List<ElectionEventType>
+        {
+            ElectionEventType.START,
+            ElectionEventType.OFFER_START,
+            ElectionEventType.OFFER_COMPLETE,
+            ElectionEventType.DETERMINE_START,
+            ElectionEventType.DETERMINE_COMPLETE,
+            ElectionEventType.DETERMINE_START,
+            ElectionEventType.DETERMINE_COMPLETE,
+            ElectionEventType.ELECTED_START,
+            ElectionEventType.ELECTED_COMPLETE
+        };
+        
+        await electionSupport2.stop();
+
+        events.Should().BeEquivalentTo(expectedEvents, options => options.WithStrictOrdering());
     }
 
     private LeaderElectionSupport createLeaderElectionSupport()
