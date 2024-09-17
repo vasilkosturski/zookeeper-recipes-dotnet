@@ -400,7 +400,7 @@ namespace org.apache.zookeeper.recipes.leader {
         /// </summary>
         /// <param name="listener"> </param>
         public void removeListener(LeaderElectionAware listener) {
-            listeners.TryRemove(listener, out dummy);
+            listeners.Remove(listener, out dummy);
         }
 
         /// <summary>

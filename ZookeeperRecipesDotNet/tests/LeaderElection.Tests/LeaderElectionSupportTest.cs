@@ -11,9 +11,8 @@ public sealed class LeaderElectionSupportTest : IAsyncLifetime
 {
     private readonly ITestOutputHelper _testOutputHelper;
     private const int ConnectionTimeout = 4000;
-    private static int _globalCounter;
     
-    private readonly string _root = "/" + Interlocked.Increment(ref _globalCounter);
+    private readonly string _root = $"/{Guid.NewGuid()}";
     private ZooKeeper _zooKeeper;
 
     public LeaderElectionSupportTest(ITestOutputHelper testOutputHelper)
@@ -146,10 +145,13 @@ public sealed class LeaderElectionSupportTest : IAsyncLifetime
             ElectionEventType.OFFER_COMPLETE,
             ElectionEventType.DETERMINE_START,
             ElectionEventType.DETERMINE_COMPLETE,
+            ElectionEventType.READY_START,
             ElectionEventType.DETERMINE_START,
             ElectionEventType.DETERMINE_COMPLETE,
             ElectionEventType.ELECTED_START,
-            ElectionEventType.ELECTED_COMPLETE
+            ElectionEventType.ELECTED_COMPLETE,
+            ElectionEventType.STOP_START,
+            ElectionEventType.STOP_COMPLETE
         };
         
         await electionSupport2.stop();
