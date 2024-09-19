@@ -32,7 +32,7 @@ public class LeaderElection : Watcher
         await EnsureElectionPathExistsAsync();
 
         // Create an ephemeral sequential znode for this instance
-        await _zooKeeper.createAsync($"{_electionPath}/n_", [],
+        _znodePath = await _zooKeeper.createAsync($"{_electionPath}/n_", [],
             ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
         
         await CheckLeadership();
