@@ -64,14 +64,18 @@ public class LeaderElection : Watcher
         var children = (await _zooKeeper.getChildrenAsync(_electionPath)).Children;
         children.Sort();
 
-        if (_znodePath.EndsWith(children[0]))
+        var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf("/") + 1);
+        if (currentNodeName == children[0])
         {
             if (!_isLeader)
             {
                 _isLeader = true;
                 try
                 {
-                    ElectionHandler?.OnElectionComplete(true);    
+                    if (ElectionHandler != null)
+                    {
+                        await ElectionHandler.OnElectionComplete(true);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -81,8 +85,8 @@ public class LeaderElection : Watcher
         }
         else
         {
-            // Watch the node just before this one in the list
-            int index = children.IndexOf(_znodePath.Substring(_electionPath.Length + 1));
+            // Watch the node just before this one in the sorted list
+            int index = children.IndexOf(currentNodeName);
             if (index > 0)
             {
                 string previousNode = $"{_electionPath}/{children[index - 1]}";
