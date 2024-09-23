@@ -1,5 +1,6 @@
 ﻿using org.apache.zookeeper;
 using Serilog;
+using Nito.AsyncEx;
 
 namespace LeaderElection;
 
@@ -16,6 +17,7 @@ public class LeaderElection : Watcher
     private ZooKeeper _zooKeeper;
     private string _znodePath;
     private bool _isLeader;
+    private readonly AsyncLock _mutex = new();
 
     public IElectionHandler ElectionHandler { get; set; }
 
@@ -30,9 +32,8 @@ public class LeaderElection : Watcher
     public async Task RegisterForElection()
     {
         await EnsureElectionPathExistsAsync();
-
-        // Create an ephemeral sequential znode for this instance
-        _znodePath = await _zooKeeper.createAsync($"{_electionPath}/n_", [],
+        
+        _znodePath = await _zooKeeper.createAsync($"{_electionPath}/n_", new byte[0],  // Corrected to new byte[0]
             ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
         
         await CheckLeadership();
@@ -40,8 +41,8 @@ public class LeaderElection : Watcher
     
     private void InitializeZooKeeper()
     {
-        const int sessionTimeoutSeconds = 30;
-        _zooKeeper = new ZooKeeper(_zkConnectionString, sessionTimeoutSeconds, this);
+        const int sessionTimeoutMillis = 30000;
+        _zooKeeper = new ZooKeeper(_zkConnectionString, sessionTimeoutMillis, this);
     }
 
     private async Task EnsureElectionPathExistsAsync()
@@ -50,7 +51,8 @@ public class LeaderElection : Watcher
         {
             try
             {
-                await _zooKeeper.createAsync(_electionPath, [], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+                await _zooKeeper.createAsync(_electionPath, [],
+                    ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             }
             catch (KeeperException.NodeExistsException)
             {
@@ -61,46 +63,57 @@ public class LeaderElection : Watcher
 
     private async Task CheckLeadership()
     {
-        var children = (await _zooKeeper.getChildrenAsync(_electionPath)).Children;
-        children.Sort();
-
-        var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf("/") + 1);
-        if (currentNodeName == children[0])
+        using (await _mutex.LockAsync())
         {
-            if (!_isLeader)
+            var children = (await _zooKeeper.getChildrenAsync(_electionPath)).Children;
+            children.Sort();
+
+            var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf("/") + 1);
+
+            if (currentNodeName == children[0])
             {
-                _isLeader = true;
-                try
+                if (!_isLeader)
                 {
-                    if (ElectionHandler != null)
+                    _isLeader = true;
+                    try
                     {
-                        await ElectionHandler.OnElectionComplete(true);
+                        if (ElectionHandler != null)
+                        {
+                            await ElectionHandler.OnElectionComplete(true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "Error handling election completion");
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Error handling election completion");
-                }
             }
-        }
-        else
-        {
-            // Watch the node just before this one in the sorted list
-            int index = children.IndexOf(currentNodeName);
-            if (index > 0)
+            else
             {
-                string previousNode = $"{_electionPath}/{children[index - 1]}";
-                await _zooKeeper.existsAsync(previousNode, true); // Set a watch on the previous node
+                // Watch the node just before this one in the sorted list
+                int index = children.IndexOf(currentNodeName);
+                if (index > 0)
+                {
+                    string previousNode = $"{_electionPath}/{children[index - 1]}";
+                    await _zooKeeper.existsAsync(previousNode, true);  // Set a watch on the previous node
+                }
             }
         }
     }
 
     public async Task CloseAsync()
     {
-        if (_zooKeeper != null)
+        try
         {
-            await _zooKeeper.closeAsync();
-            _zooKeeper = null;
+            if (_zooKeeper != null)
+            {
+                await _zooKeeper.closeAsync();
+                _zooKeeper = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error while closing ZooKeeper session");
         }
     }
 
