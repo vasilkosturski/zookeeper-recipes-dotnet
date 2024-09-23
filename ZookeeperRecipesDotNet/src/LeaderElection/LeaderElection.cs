@@ -11,20 +11,22 @@ public interface IElectionHandler
 
 public class LeaderElection : Watcher
 {
+    private readonly AsyncLock _mutex = new();
+    
+    private readonly IElectionHandler _electionHandler;
     private readonly string _zkConnectionString;
     private readonly string _electionPath;
     private readonly ILogger _logger;
+    
     private ZooKeeper _zooKeeper;
     private string _znodePath;
     private bool _isLeader;
-    private readonly AsyncLock _mutex = new();
 
-    public IElectionHandler ElectionHandler { get; set; }
-
-    public LeaderElection(string zkConnectionString, string electionPath, ILogger logger)
+    public LeaderElection(string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
     {
         _zkConnectionString = zkConnectionString;
         _electionPath = electionPath;
+        _electionHandler = electionHandler;
         _logger = logger;
         InitializeZooKeeper();
     }
@@ -33,7 +35,7 @@ public class LeaderElection : Watcher
     {
         await EnsureElectionPathExistsAsync();
         
-        _znodePath = await _zooKeeper.createAsync($"{_electionPath}/n_", new byte[0],  // Corrected to new byte[0]
+        _znodePath = await _zooKeeper.createAsync($"{_electionPath}/n_", [],
             ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
         
         await CheckLeadership();
@@ -68,7 +70,7 @@ public class LeaderElection : Watcher
             var children = (await _zooKeeper.getChildrenAsync(_electionPath)).Children;
             children.Sort();
 
-            var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf("/") + 1);
+            var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf('/') + 1);
 
             if (currentNodeName == children[0])
             {
@@ -77,9 +79,9 @@ public class LeaderElection : Watcher
                     _isLeader = true;
                     try
                     {
-                        if (ElectionHandler != null)
+                        if (_electionHandler != null)
                         {
-                            await ElectionHandler.OnElectionComplete(true);
+                            await _electionHandler.OnElectionComplete(true);
                         }
                     }
                     catch (Exception ex)
@@ -90,12 +92,11 @@ public class LeaderElection : Watcher
             }
             else
             {
-                // Watch the node just before this one in the sorted list
-                int index = children.IndexOf(currentNodeName);
+                var index = children.IndexOf(currentNodeName);
                 if (index > 0)
                 {
-                    string previousNode = $"{_electionPath}/{children[index - 1]}";
-                    await _zooKeeper.existsAsync(previousNode, true);  // Set a watch on the previous node
+                    var previousNode = $"{_electionPath}/{children[index - 1]}";
+                    await _zooKeeper.existsAsync(previousNode, true);
                 }
             }
         }
