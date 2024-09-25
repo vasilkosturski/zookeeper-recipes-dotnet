@@ -30,6 +30,14 @@ public class LeaderElection : Watcher
         _logger = logger;
         InitializeZooKeeper();
     }
+    
+    public async Task<bool> IsLeaderAsync()
+    {
+        using (await _mutex.LockAsync())
+        {
+            return _isLeader;
+        }
+    }
 
     public async Task RegisterForElection()
     {
@@ -72,7 +80,8 @@ public class LeaderElection : Watcher
 
             var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf('/') + 1);
 
-            if (currentNodeName == children[0])
+            var currentNodeIsLeader = currentNodeName == children[0];
+            if (currentNodeIsLeader)
             {
                 if (!_isLeader)
                 {
@@ -92,6 +101,7 @@ public class LeaderElection : Watcher
             }
             else
             {
+                _isLeader = false;
                 var index = children.IndexOf(currentNodeName);
                 if (index > 0)
                 {
