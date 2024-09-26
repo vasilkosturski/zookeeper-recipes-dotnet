@@ -1,6 +1,6 @@
 ﻿using org.apache.zookeeper;
-using Serilog;
 using Nito.AsyncEx;
+using ILogger = Serilog.ILogger;
 
 namespace LeaderElection;
 

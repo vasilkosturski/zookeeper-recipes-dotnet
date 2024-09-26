@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+﻿using System.Collections.Concurrent;
 using Nito.AsyncEx;
-using org.apache.utils;
-using Serilog;
+using ILogger = Serilog.ILogger;
 
 namespace org.apache.zookeeper.recipes.leader {
     /// <summary>
