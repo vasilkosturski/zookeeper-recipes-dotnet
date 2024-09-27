@@ -59,7 +59,9 @@ public class LeaderElection : Watcher
 
             var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf('/') + 1);
 
-            if (currentNodeName == children[0])
+            // If the current node is the first in the list, it's the leader
+            var isLeader = currentNodeName == children[0]; 
+            if (isLeader)
             {
                 await _electionHandler.OnElectionComplete(true);
             }
@@ -69,7 +71,15 @@ public class LeaderElection : Watcher
                 if (index > 0)
                 {
                     var previousNode = $"{_electionPath}/{children[index - 1]}";
-                    await _zooKeeper.existsAsync(previousNode, true);
+                    
+                    var stat = await _zooKeeper.existsAsync(previousNode, true);
+
+                    // The node has gone missing between the call to getChildren() and exists().
+                    // We need to try and become the leader.
+                    if (stat == null)
+                    {
+                        await CheckLeadership();
+                    }
                 }
             }
         }
