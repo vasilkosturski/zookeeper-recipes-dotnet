@@ -1,53 +1,70 @@
-namespace LeaderElection;
+using ILogger = Serilog.ILogger;
 
-public interface IElectionHandler
+namespace LeaderElection
 {
-    Task OnElectionComplete(bool isLeader);
-    bool IsLeader();
-}
-
-public class ElectionHandler : IElectionHandler, IHostedService
-{
-    private readonly LeaderElection _leaderElection;
-    private readonly ILogger<ElectionHandler> _logger;
-    private bool _isLeader;
-
-    public ElectionHandler(LeaderElection leaderElection, ILogger<ElectionHandler> logger)
+    public interface IElectionHandler
     {
-        _leaderElection = leaderElection;
-        _logger = logger;
+        Task OnElectionComplete(bool isLeader);
+        bool IsLeader();
     }
-    
-    public Task OnElectionComplete(bool isLeader)
-    {
-        _isLeader = isLeader;
 
-        if (isLeader)
+    public class ElectionHandler : IElectionHandler, IHostedService
+    {
+        private readonly string _zkConnectionString;
+        private readonly string _electionPath;
+        private readonly ILogger _logger;
+        private LeaderElection _leaderElection;
+        private bool _isLeader;
+
+        public ElectionHandler(string zkConnectionString, string electionPath, ILogger logger)
         {
-            _logger.LogInformation("This node has been elected as the leader.");
-        }
-        else
-        {
-            _logger.LogInformation("This node is a follower.");
+            _zkConnectionString = zkConnectionString;
+            _electionPath = electionPath;
+            _logger = logger;
         }
 
-        return Task.CompletedTask;
-    }
+        // This method is invoked by LeaderElection when the node becomes a leader or follower
+        public Task OnElectionComplete(bool isLeader)
+        {
+            _isLeader = isLeader;
 
-    public bool IsLeader()
-    {
-        return _isLeader;
-    }
-    
-    public async Task StartAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Starting the leader election process.");
-        await _leaderElection.RegisterForElection(); // Trigger leader election process at startup
-    }
+            if (isLeader)
+            {
+                _logger.Information("This node has been elected as the leader.");
+            }
+            else
+            {
+                _logger.Information("This node is a follower.");
+            }
 
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Stopping the leader election process and closing resources.");
-        await _leaderElection.Close(); // Ensure ZooKeeper is properly closed on shutdown
+            return Task.CompletedTask;
+        }
+
+        // Return whether this node is the leader
+        public bool IsLeader()
+        {
+            return _isLeader;
+        }
+
+        // IHostedService method - starts the leader election process
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            _logger.Information("Starting leader election process...");
+
+            // Use the async factory method to create the LeaderElection instance
+            _leaderElection = await LeaderElection.CreateAsync(_zkConnectionString, _electionPath, this, _logger);
+
+            // Now that leader election is registered, the process is running
+        }
+
+        // IHostedService method - stops the leader election process
+        public async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.Information("Stopping leader election process and closing resources...");
+            if (_leaderElection != null)
+            {
+                await _leaderElection.Close(); // Ensure ZooKeeper is properly closed on shutdown
+            }
+        }
     }
 }

@@ -16,26 +16,32 @@ public class LeaderElection : Watcher
     // Channel to queue leadership tasks
     private readonly Channel<Func<Task>> _leadershipTaskChannel = Channel.CreateUnbounded<Func<Task>>();
 
-    public LeaderElection(string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
+    // Private constructor to ensure control over instance creation
+    private LeaderElection(string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
     {
         _zkConnectionString = zkConnectionString;
         _electionPath = electionPath;
         _electionHandler = electionHandler;
         _logger = logger;
-        InitializeZooKeeper();
 
-        // Start the task processor to process leadership checks from the channel
-        Task.Run(ProcessLeadershipTasksAsync);
-    }
-
-    private void InitializeZooKeeper()
-    {
         const int sessionTimeoutMillis = 30000;
         _logger.Information("Initializing ZooKeeper connection...");
         _zooKeeper = new ZooKeeper(_zkConnectionString, sessionTimeoutMillis, this);
+
+        // Start processing leadership tasks
+        Task.Run(ProcessLeadershipTasksAsync);
     }
 
-    public async Task RegisterForElection()
+    // Async factory method to initialize the instance and handle async registration
+    public static async Task<LeaderElection> CreateAsync(string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
+    {
+        var instance = new LeaderElection(zkConnectionString, electionPath, electionHandler, logger);
+        await instance.RegisterForElection();  // Ensure that registration is completed
+        return instance;
+    }
+
+    // Private method to ensure registration is only done by the factory method
+    private async Task RegisterForElection()
     {
         await EnsureElectionPathExistsAsync();
 
@@ -45,7 +51,7 @@ public class LeaderElection : Watcher
         _logger.Information("Node created: {ZnodePath}. Enqueueing leadership check.", _znodePath);
 
         // Enqueue the leadership check task in the channel
-        await _leadershipTaskChannel.Writer.WriteAsync(CheckLeadershipAsync);
+        await _leadershipTaskChannel.Writer.WriteAsync(() => CheckLeadershipAsync());
     }
 
     private async Task EnsureElectionPathExistsAsync()
@@ -128,7 +134,7 @@ public class LeaderElection : Watcher
         {
             _logger.Information("Node deleted event detected. Enqueueing leadership check.");
             // Enqueue a leadership check when a node is deleted
-            await _leadershipTaskChannel.Writer.WriteAsync(CheckLeadershipAsync);
+            await _leadershipTaskChannel.Writer.WriteAsync(() => CheckLeadershipAsync());
         }
     }
 
