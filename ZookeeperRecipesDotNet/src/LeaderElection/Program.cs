@@ -10,13 +10,11 @@ var logger = new LoggerConfiguration()
 builder.Logging.ClearProviders();
 builder.Logging.AddSerilog(logger);
 
-builder.Services.AddSingleton<IElectionHandler, ElectionHandler>();
 builder.Services.AddSingleton<LeaderElection.LeaderElection>();
+builder.Services.AddSingleton<IElectionHandler, ElectionHandler>();
+builder.Services.AddHostedService<ElectionHandler>();
 
 var app = builder.Build();
-
-var leaderElection = app.Services.GetRequiredService<LeaderElection.LeaderElection>();
-await leaderElection.RegisterForElection();
 
 app.MapGet("/leader", (IElectionHandler electionHandler) =>
 {
