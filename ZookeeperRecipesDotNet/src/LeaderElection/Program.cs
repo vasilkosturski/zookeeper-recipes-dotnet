@@ -10,7 +10,6 @@ var logger = new LoggerConfiguration()
 builder.Logging.ClearProviders();
 builder.Logging.AddSerilog(logger);
 
-// Register ElectionHandler as a hosted service
 builder.Services.AddHostedService<ElectionHandler>();
 
 var app = builder.Build();
