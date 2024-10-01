@@ -52,7 +52,7 @@ namespace LeaderElection
             _logger.Information("Starting leader election process...");
 
             // Use the async factory method to create the LeaderElection instance
-            _leaderElection = await LeaderElection.CreateAsync(_zkConnectionString, _electionPath, this, _logger);
+            _leaderElection = await LeaderElection.Create(_zkConnectionString, _electionPath, this, _logger);
 
             // Now that leader election is registered, the process is running
         }

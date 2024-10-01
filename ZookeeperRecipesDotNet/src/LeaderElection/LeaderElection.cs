@@ -11,11 +11,9 @@ public class LeaderElection : Watcher
     private readonly ILogger _logger;
     private ZooKeeper _zooKeeper;
     private string _znodePath;
-
-    // Channel to queue leadership tasks
-    private readonly Channel<Func<Task>> _leadershipTaskChannel = Channel.CreateUnbounded<Func<Task>>();
-
-    // Private constructor to ensure control over instance creation
+    
+    private readonly Channel<Func<Task>> _checkLeadershipChannel = Channel.CreateUnbounded<Func<Task>>();
+    
     private LeaderElection(string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
     {
         _electionPath = electionPath;
@@ -25,41 +23,39 @@ public class LeaderElection : Watcher
         const int sessionTimeoutMillis = 30000;
         _logger.Information("Initializing ZooKeeper connection...");
         _zooKeeper = new ZooKeeper(zkConnectionString, sessionTimeoutMillis, this);
-
-        // Start processing leadership tasks
-        Task.Run(ProcessLeadershipTasksAsync);
     }
-
-    // Async factory method to initialize the instance and handle async registration
-    public static async Task<LeaderElection> CreateAsync(string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
+    
+    public static async Task<LeaderElection> Create(
+        string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
     {
         var instance = new LeaderElection(zkConnectionString, electionPath, electionHandler, logger);
-        await instance.RegisterForElection();  // Ensure that registration is completed
+        
+        _ = Task.Run(instance.ProcessLeadershipTasks);
+        await instance.RegisterForElection();
+        
         return instance;
     }
-
-    // Private method to ensure registration is only done by the factory method
+    
     private async Task RegisterForElection()
     {
-        await EnsureElectionPathExistsAsync();
+        await EnsureElectionPathExists();
 
-        _znodePath = await _zooKeeper.createAsync($"{_electionPath}/n_", new byte[0],
+        _znodePath = await _zooKeeper.createAsync($"{_electionPath}/n_", [],
             ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
 
         _logger.Information("Node created: {ZnodePath}. Enqueueing leadership check.", _znodePath);
-
-        // Enqueue the leadership check task in the channel
-        await _leadershipTaskChannel.Writer.WriteAsync(() => CheckLeadership());
+        
+        await _checkLeadershipChannel.Writer.WriteAsync(CheckLeadership);
     }
 
-    private async Task EnsureElectionPathExistsAsync()
+    private async Task EnsureElectionPathExists()
     {
         _logger.Information("Ensuring election path exists...");
         if (await _zooKeeper.existsAsync(_electionPath) == null)
         {
             try
             {
-                await _zooKeeper.createAsync(_electionPath, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+                await _zooKeeper.createAsync(_electionPath, [], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
                 _logger.Information("Election path created: {ElectionPath}", _electionPath);
             }
             catch (KeeperException.NodeExistsException)
@@ -68,17 +64,23 @@ public class LeaderElection : Watcher
             }
         }
     }
-
-    // Channel processor that serializes leadership tasks
-    private async Task ProcessLeadershipTasksAsync()
+    
+    private async Task ProcessLeadershipTasks()
     {
-        _logger.Information("Starting leadership task processing...");
-        await foreach (var leadershipTask in _leadershipTaskChannel.Reader.ReadAllAsync())
+        try
         {
-            _logger.Information("Processing leadership task...");
-            await leadershipTask();
+            _logger.Information("Starting leadership task processing...");
+            await foreach (var leadershipTask in _checkLeadershipChannel.Reader.ReadAllAsync())
+            {
+                _logger.Information("Processing leadership task...");
+                await leadershipTask();
+            }
+            _logger.Information("Leadership task processing stopped.");
         }
-        _logger.Information("Leadership task processing stopped.");
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "An error occurred while processing leadership tasks.");
+        }
     }
     
     private async Task CheckLeadership()
@@ -90,7 +92,7 @@ public class LeaderElection : Watcher
             var children = (await _zooKeeper.getChildrenAsync(_electionPath)).Children;
             children.Sort();
 
-            var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf('/') + 1);
+            var currentNodeName = _znodePath[(_znodePath.LastIndexOf('/') + 1)..];
             
             var isLeader = currentNodeName == children[0];
             if (isLeader)
@@ -128,8 +130,7 @@ public class LeaderElection : Watcher
         if (@event.get_Type() == Event.EventType.NodeDeleted)
         {
             _logger.Information("Node deleted event detected. Enqueueing leadership check.");
-            // Enqueue a leadership check when a node is deleted
-            await _leadershipTaskChannel.Writer.WriteAsync(CheckLeadership);
+            await _checkLeadershipChannel.Writer.WriteAsync(CheckLeadership);
         }
     }
 
@@ -143,6 +144,6 @@ public class LeaderElection : Watcher
         }
 
         _logger.Information("Closing leadership task channel writer.");
-        _leadershipTaskChannel.Writer.Complete();
+        _checkLeadershipChannel.Writer.Complete();
     }
 }
