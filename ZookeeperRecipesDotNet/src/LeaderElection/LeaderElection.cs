@@ -6,7 +6,6 @@ namespace LeaderElection;
 
 public class LeaderElection : Watcher
 {
-    private readonly string _zkConnectionString;
     private readonly string _electionPath;
     private readonly IElectionHandler _electionHandler;
     private readonly ILogger _logger;
@@ -19,14 +18,13 @@ public class LeaderElection : Watcher
     // Private constructor to ensure control over instance creation
     private LeaderElection(string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
     {
-        _zkConnectionString = zkConnectionString;
         _electionPath = electionPath;
         _electionHandler = electionHandler;
         _logger = logger;
 
         const int sessionTimeoutMillis = 30000;
         _logger.Information("Initializing ZooKeeper connection...");
-        _zooKeeper = new ZooKeeper(_zkConnectionString, sessionTimeoutMillis, this);
+        _zooKeeper = new ZooKeeper(zkConnectionString, sessionTimeoutMillis, this);
 
         // Start processing leadership tasks
         Task.Run(ProcessLeadershipTasksAsync);
