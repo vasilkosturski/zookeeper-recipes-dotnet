@@ -49,7 +49,7 @@ public class LeaderElection : Watcher
         _logger.Information("Node created: {ZnodePath}. Enqueueing leadership check.", _znodePath);
 
         // Enqueue the leadership check task in the channel
-        await _leadershipTaskChannel.Writer.WriteAsync(() => CheckLeadershipAsync());
+        await _leadershipTaskChannel.Writer.WriteAsync(() => CheckLeadership());
     }
 
     private async Task EnsureElectionPathExistsAsync()
@@ -80,9 +80,8 @@ public class LeaderElection : Watcher
         }
         _logger.Information("Leadership task processing stopped.");
     }
-
-    // The leadership check logic enqueued into the channel
-    private async Task CheckLeadershipAsync()
+    
+    private async Task CheckLeadership()
     {
         try
         {
@@ -92,31 +91,29 @@ public class LeaderElection : Watcher
             children.Sort();
 
             var currentNodeName = _znodePath.Substring(_znodePath.LastIndexOf('/') + 1);
-
-            // If the current node is the first in the list, it's the leader
+            
             var isLeader = currentNodeName == children[0];
             if (isLeader)
             {
                 _logger.Information("Node {Node} is the leader.", currentNodeName);
                 await _electionHandler.OnElectionComplete(true);
+                return;
             }
-            else
+            
+            _logger.Information("Node {Node} is not the leader.", currentNodeName);
+            var index = children.IndexOf(currentNodeName);
+            if (index != -1)
             {
-                _logger.Information("Node {Node} is not the leader.", currentNodeName);
-                var index = children.IndexOf(currentNodeName);
-                if (index > 0)
+                var previousNode = $"{_electionPath}/{children[index - 1]}";
+                _logger.Information("Watching previous node: {PreviousNode}", previousNode);
+
+                var prevNodeStat = await _zooKeeper.existsAsync(previousNode, true);
+
+                // The node has gone missing between the call to getChildren() and exists().
+                if (prevNodeStat == null)
                 {
-                    var previousNode = $"{_electionPath}/{children[index - 1]}";
-                    _logger.Information("Watching previous node: {PreviousNode}", previousNode);
-
-                    var stat = await _zooKeeper.existsAsync(previousNode, true);
-
-                    // The node has gone missing between the call to getChildren() and exists().
-                    if (stat == null)
-                    {
-                        _logger.Information("Previous node {PreviousNode} no longer exists. Rechecking leadership.", previousNode);
-                        await CheckLeadershipAsync();
-                    }
+                    _logger.Information("Previous node {PreviousNode} no longer exists. Rechecking leadership.", previousNode);
+                    await CheckLeadership();
                 }
             }
         }
@@ -132,7 +129,7 @@ public class LeaderElection : Watcher
         {
             _logger.Information("Node deleted event detected. Enqueueing leadership check.");
             // Enqueue a leadership check when a node is deleted
-            await _leadershipTaskChannel.Writer.WriteAsync(() => CheckLeadershipAsync());
+            await _leadershipTaskChannel.Writer.WriteAsync(CheckLeadership);
         }
     }
 
