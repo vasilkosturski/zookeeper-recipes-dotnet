@@ -11,6 +11,7 @@ public class LeaderElection : Watcher
     private readonly ILogger _logger;
     private ZooKeeper _zooKeeper;
     private string _znodePath;
+    private Task _leadershipTaskProcessing;
     
     private readonly Channel<Func<Task>> _checkLeadershipChannel = Channel.CreateUnbounded<Func<Task>>();
     
@@ -29,12 +30,15 @@ public class LeaderElection : Watcher
         string zkConnectionString, string electionPath, IElectionHandler electionHandler, ILogger logger)
     {
         var instance = new LeaderElection(zkConnectionString, electionPath, electionHandler, logger);
-        
-        _ = Task.Run(instance.ProcessLeadershipTasks);
+
+        instance.StartProcessLeadershipTasks();
         await instance.RegisterForElection();
         
         return instance;
     }
+    
+    private void StartProcessLeadershipTasks() =>
+        _leadershipTaskProcessing = Task.Run(ProcessLeadershipTasks);
     
     private async Task RegisterForElection()
     {
@@ -145,5 +149,8 @@ public class LeaderElection : Watcher
 
         _logger.Information("Closing leadership task channel writer.");
         _checkLeadershipChannel.Writer.Complete();
+        
+        await _leadershipTaskProcessing;
+        _logger.Information("Leadership task processing stopped.");
     }
 }
