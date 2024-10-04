@@ -30,7 +30,7 @@ public static class Program
 
         await zookeeperContainer.StartAsync();
         Console.WriteLine("ZooKeeper started!");
-        
+
         // Start API instances
         var api1 = CreateApiInstance(ApiInstanceOncePort, "instance1", dockerNetwork);
         var api2 = CreateApiInstance(ApiInstanceTwoPort, "instance2", dockerNetwork);
@@ -39,25 +39,22 @@ public static class Program
         await Task.WhenAll(api1.StartAsync(), api2.StartAsync(), api3.StartAsync());
         Console.WriteLine("API instances started!");
 
-        // Wait for leadership election to stabilize
-        await Task.Delay(2000);
-        
         // Check leader status for all instances
         Console.WriteLine("Initial leader status:");
         await CheckLeaderStatus(ApiInstanceOncePort);
         await CheckLeaderStatus(ApiInstanceTwoPort);
         await CheckLeaderStatus(ApiInstanceThreePort);
-        
+
         // Find the current leader
         var leaderPort = await FindLeader([ApiInstanceOncePort, ApiInstanceTwoPort, ApiInstanceThreePort]);
         Console.WriteLine($"The current leader is running on port {leaderPort}");
-        
+
         // Stop the leader instance
         Console.WriteLine($"Stopping the leader API instance on port {leaderPort}...");
         await StopLeaderNode(leaderPort, api1, api2, api3);
 
         // Wait for leadership to change
-        await Task.Delay(2000);
+        await Task.Delay(1000);
 
         // Check leader status for only running instances
         Console.WriteLine("Leader status after stopping the leader instance:");
@@ -85,6 +82,7 @@ public static class Program
             .WithPortBinding(port, 8080)
             .WithEnvironment("zkConnectionString", $"{ZookeeperContainerName}:{ZookeeperPort}")
             .WithNetwork(network)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(8080))
             .Build();
     }
 
@@ -118,15 +116,15 @@ public static class Program
 
     private static async Task StopLeaderNode(int leaderPort, IContainer api1, IContainer api2, IContainer api3)
     {
-        if (leaderPort == 5001)
+        if (leaderPort == ApiInstanceOncePort)
         {
             await api1.StopAsync();
         }
-        else if (leaderPort == 5002)
+        else if (leaderPort == ApiInstanceTwoPort)
         {
             await api2.StopAsync();
         }
-        else if (leaderPort == 5003)
+        else if (leaderPort == ApiInstanceThreePort)
         {
             await api3.StopAsync();
         }
