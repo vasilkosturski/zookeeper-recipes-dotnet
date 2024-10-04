@@ -11,7 +11,6 @@ var logger = new LoggerConfiguration()
 builder.Logging.ClearProviders();
 builder.Logging.AddSerilog(logger);
 
-// Read ZooKeeper connection string and election path from environment variables
 var zkConnectionString = Environment.GetEnvironmentVariable("zkConnectionString") ?? "localhost:2181";
 var electionPath = Environment.GetEnvironmentVariable("electionPath") ?? "/leader-election";
 

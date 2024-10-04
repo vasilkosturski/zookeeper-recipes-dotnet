@@ -6,57 +6,64 @@ namespace LeaderElection.Driver;
 
 public static class Program
 {
-    static async Task Main()
+    private const int ApiInstanceOncePort = 5001;
+    private const int ApiInstanceTwoPort = 5002;
+    private const int ApiInstanceThreePort = 5003;
+    private const string ZookeeperContainerName = "zookeeper-test";
+    private const int ZookeeperPort = 2181;
+    
+    private static async Task Main()
     {
-        // Create Docker network
-        var network = new NetworkBuilder()
+        // Create a network for the containers
+        var dockerNetwork = new NetworkBuilder()
             .WithName("leader-election-network")
             .Build();
-        await network.CreateAsync();
+        await dockerNetwork.CreateAsync();
 
-        // Create and start a ZooKeeper container
+        // Start ZooKeeper container
         var zookeeperContainer = new ContainerBuilder()
             .WithImage("zookeeper:3.6")
-            .WithName("zookeeper-test")
-            .WithPortBinding(2181, 2181)
-            .WithNetwork(network)  // Add to network
+            .WithName(ZookeeperContainerName)
+            .WithPortBinding(ZookeeperPort, ZookeeperPort)
+            .WithNetwork(dockerNetwork)
             .Build();
 
         await zookeeperContainer.StartAsync();
         Console.WriteLine("ZooKeeper started!");
-
+        
         // Start API instances
-        var api1 = CreateApiInstance(5001, "node1", network);
-        var api2 = CreateApiInstance(5002, "node2", network);
-        var api3 = CreateApiInstance(5003, "node3", network);
+        var api1 = CreateApiInstance(ApiInstanceOncePort, "instance1", dockerNetwork);
+        var api2 = CreateApiInstance(ApiInstanceTwoPort, "instance2", dockerNetwork);
+        var api3 = CreateApiInstance(ApiInstanceThreePort, "instance3", dockerNetwork);
 
         await Task.WhenAll(api1.StartAsync(), api2.StartAsync(), api3.StartAsync());
         Console.WriteLine("API instances started!");
 
         // Wait for leadership election to stabilize
-        await Task.Delay(5000);
-
-        // Initial leader status
+        await Task.Delay(2000);
+        
+        // Check leader status for all instances
         Console.WriteLine("Initial leader status:");
-        await CheckLeaderStatus(5001);
-        await CheckLeaderStatus(5002);
-        await CheckLeaderStatus(5003);
-
-        // Get the current leader
-        var leaderPort = await FindLeader([5001, 5002, 5003]);
+        await CheckLeaderStatus(ApiInstanceOncePort);
+        await CheckLeaderStatus(ApiInstanceTwoPort);
+        await CheckLeaderStatus(ApiInstanceThreePort);
+        
+        // Find the current leader
+        var leaderPort = await FindLeader([ApiInstanceOncePort, ApiInstanceTwoPort, ApiInstanceThreePort]);
         Console.WriteLine($"The current leader is running on port {leaderPort}");
-
+        
         // Stop the leader instance
         Console.WriteLine($"Stopping the leader API instance on port {leaderPort}...");
         await StopLeaderNode(leaderPort, api1, api2, api3);
 
         // Wait for leadership to change
-        await Task.Delay(5000);
+        await Task.Delay(2000);
 
         // Check leader status for only running instances
         Console.WriteLine("Leader status after stopping the leader instance:");
-        var remainingPorts = new[] { 5001, 5002, 5003 }.Where(p => p != leaderPort);
-        foreach (var port in remainingPorts)
+        var remainingInstancesPorts = new[] { ApiInstanceOncePort, ApiInstanceTwoPort, ApiInstanceThreePort }
+            .Where(p => p != leaderPort);
+        foreach (var port in remainingInstancesPorts)
         {
             await CheckLeaderStatus(port);
         }
@@ -70,18 +77,18 @@ public static class Program
         Console.WriteLine("Test completed.");
     }
 
-    static IContainer CreateApiInstance(int port, string name, INetwork network)
+    private static IContainer CreateApiInstance(int port, string name, INetwork network)
     {
         return new ContainerBuilder()
-            .WithImage("leader-election-api-image") // Replace with your API image
+            .WithImage("leader-election-api-image")
             .WithName(name)
-            .WithPortBinding(port, 8080) // Maps container port 8080 to your defined port
-            .WithEnvironment("zkConnectionString", "zookeeper-test:2181")
-            .WithNetwork(network)  // Add to the same network
+            .WithPortBinding(port, 8080)
+            .WithEnvironment("zkConnectionString", $"{ZookeeperContainerName}:{ZookeeperPort}")
+            .WithNetwork(network)
             .Build();
     }
 
-    static async Task CheckLeaderStatus(int port)
+    private static async Task CheckLeaderStatus(int port)
     {
         try
         {
@@ -95,28 +102,21 @@ public static class Program
         }
     }
 
-    static async Task<int> FindLeader(int[] ports)
+    private static async Task<int> FindLeader(int[] ports)
     {
         foreach (var port in ports)
         {
-            try
+            using var client = new HttpClient();
+            var response = await client.GetStringAsync($"http://localhost:{port}/leader");
+            if (response.Contains("\"isLeader\":true"))
             {
-                using var client = new HttpClient();
-                var response = await client.GetStringAsync($"http://localhost:{port}/leader");
-                if (response.Contains("\"isLeader\":true"))
-                {
-                    return port;
-                }
-            }
-            catch (HttpRequestException)
-            {
-                // Skip if the instance is down
+                return port;
             }
         }
         throw new Exception("No leader found.");
     }
 
-    static async Task StopLeaderNode(int leaderPort, IContainer api1, IContainer api2, IContainer api3)
+    private static async Task StopLeaderNode(int leaderPort, IContainer api1, IContainer api2, IContainer api3)
     {
         if (leaderPort == 5001)
         {
