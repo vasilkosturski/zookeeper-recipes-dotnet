@@ -2,11 +2,7 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E8182155-F2F9-4A51-8DDF-60D866BFF30B}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{5E5CC7FB-5A7D-45DE-BCAB-6135A0FA414E}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LeaderElection", "src\LeaderElection\LeaderElection.csproj", "{96ACACF6-2C74-4D9A-89E2-D4E3728AEDA4}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LeaderElection.Tests", "tests\LeaderElection.Tests\LeaderElection.Tests.csproj", "{C71698BB-CB7B-4FCB-A1A1-758FBFD3B431}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LeaderElection.Driver", "src\LeaderElection.Driver\LeaderElection.Driver.csproj", "{B1EE479F-8BDD-4AA0-AA3C-BF0BFF02BD8D}"
 EndProject
@@ -20,10 +16,6 @@ Global
 		{96ACACF6-2C74-4D9A-89E2-D4E3728AEDA4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{96ACACF6-2C74-4D9A-89E2-D4E3728AEDA4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{96ACACF6-2C74-4D9A-89E2-D4E3728AEDA4}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C71698BB-CB7B-4FCB-A1A1-758FBFD3B431}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C71698BB-CB7B-4FCB-A1A1-758FBFD3B431}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C71698BB-CB7B-4FCB-A1A1-758FBFD3B431}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C71698BB-CB7B-4FCB-A1A1-758FBFD3B431}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B1EE479F-8BDD-4AA0-AA3C-BF0BFF02BD8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B1EE479F-8BDD-4AA0-AA3C-BF0BFF02BD8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B1EE479F-8BDD-4AA0-AA3C-BF0BFF02BD8D}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -31,7 +23,6 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{96ACACF6-2C74-4D9A-89E2-D4E3728AEDA4} = {E8182155-F2F9-4A51-8DDF-60D866BFF30B}
-		{C71698BB-CB7B-4FCB-A1A1-758FBFD3B431} = {5E5CC7FB-5A7D-45DE-BCAB-6135A0FA414E}
 		{B1EE479F-8BDD-4AA0-AA3C-BF0BFF02BD8D} = {E8182155-F2F9-4A51-8DDF-60D866BFF30B}
 	EndGlobalSection
 EndGlobal
