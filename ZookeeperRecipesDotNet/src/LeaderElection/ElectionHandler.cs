@@ -14,7 +14,7 @@ namespace LeaderElection
         private readonly string _electionPath;
         private readonly ILogger _logger;
         private LeaderElection _leaderElection;
-        private bool _isLeader;
+        private volatile bool _isLeader;
 
         public ElectionHandler(string zkConnectionString, string electionPath, ILogger logger)
         {
